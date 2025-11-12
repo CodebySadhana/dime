@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/select";
 import BottomNav from "@/components/BottomNav";
 import { ShoppingBag, Coffee, Car, Home, Zap, Heart } from "lucide-react";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { z } from "zod";
 
 const categories = [
   { value: "food", label: "Food", icon: Coffee },
@@ -24,20 +26,87 @@ const categories = [
   { value: "entertainment", label: "Entertainment", icon: Heart },
 ];
 
+const expenseSchema = z.object({
+  amount: z.string().min(1).transform((val) => parseFloat(val)),
+  category: z.string().min(1),
+  description: z.string().max(200).optional(),
+  expense_date: z.string().min(1),
+});
+
 const Expenses = () => {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    loadExpenses();
+  }, []);
+
+  const loadExpenses = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await (supabase as any)
+        .from("expenses")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("expense_date", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setExpenses(data || []);
+    } catch (error: any) {
+      console.error("Error loading expenses:", error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save expense to database
-    toast.success("Expense tracked successfully!");
-    setAmount("");
-    setCategory("");
-    setDescription("");
-    setDate(new Date().toISOString().split("T")[0]);
+    
+    try {
+      const validated = expenseSchema.parse({
+        amount,
+        category,
+        description,
+        expense_date: date,
+      });
+
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await (supabase as any)
+        .from("expenses")
+        .insert({
+          user_id: user.id,
+          amount: validated.amount,
+          category: validated.category,
+          description: validated.description || "",
+          expense_date: validated.expense_date,
+        });
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: "Expense tracked successfully!" });
+      setAmount("");
+      setCategory("");
+      setDescription("");
+      setDate(new Date().toISOString().split("T")[0]);
+      loadExpenses();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save expense",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -111,41 +180,42 @@ const Expenses = () => {
 
             <Button
               type="submit"
+              disabled={loading}
               className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity h-12"
             >
-              Save Expense
+              {loading ? "Saving..." : "Save Expense"}
             </Button>
           </form>
         </Card>
 
         {/* Recent Expenses */}
-        <div className="space-y-3">
-          <h3 className="font-semibold">Today's Expenses</h3>
-          <Card className="divide-y divide-border bg-card/80 backdrop-blur-lg border-border">
-            {[
-              { name: "Coffee", amount: 150, category: "Food", icon: Coffee },
-              { name: "Uber", amount: 250, category: "Transport", icon: Car },
-            ].map((expense, i) => {
-              const Icon = expense.icon;
-              return (
-                <div key={i} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <Icon className="w-5 h-5 text-primary" />
+        {expenses.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="font-semibold">Recent Expenses</h3>
+            <Card className="divide-y divide-border bg-card/80 backdrop-blur-lg border-border">
+              {expenses.map((expense) => {
+                const categoryInfo = categories.find(c => c.value === expense.category) || categories[0];
+                const Icon = categoryInfo.icon;
+                return (
+                  <div key={expense.id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Icon className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{expense.description || expense.category}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {categoryInfo.label} • {new Date(expense.expense_date).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{expense.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {expense.category}
-                      </p>
-                    </div>
+                    <span className="font-semibold">₹{Number(expense.amount).toLocaleString()}</span>
                   </div>
-                  <span className="font-semibold">₹{expense.amount}</span>
-                </div>
-              );
-            })}
-          </Card>
-        </div>
+                );
+              })}
+            </Card>
+          </div>
+        )}
       </div>
 
       <BottomNav />
