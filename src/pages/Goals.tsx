@@ -30,6 +30,9 @@ const Goals = () => {
   const [emoji, setEmoji] = useState("🎯");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [contributeOpen, setContributeOpen] = useState(false);
+  const [selectedGoal, setSelectedGoal] = useState<any>(null);
+  const [contributeAmount, setContributeAmount] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -90,6 +93,41 @@ const Goals = () => {
       toast({
         title: "Error",
         description: error.message || "Failed to create goal",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleContribute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      const amount = parseFloat(contributeAmount);
+      if (isNaN(amount) || amount <= 0) {
+        throw new Error("Please enter a valid amount");
+      }
+
+      setLoading(true);
+      const newAmount = Number(selectedGoal.current_amount) + amount;
+
+      const { error } = await (supabase as any)
+        .from("savings_goals")
+        .update({ current_amount: newAmount })
+        .eq("id", selectedGoal.id);
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: `Added ₹${amount.toLocaleString()} to ${selectedGoal.name}!` });
+      setContributeAmount("");
+      setContributeOpen(false);
+      setSelectedGoal(null);
+      loadGoals();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add contribution",
         variant: "destructive",
       });
     } finally {
@@ -218,10 +256,59 @@ const Goals = () => {
                     ₹{(Number(goal.target_amount) - Number(goal.current_amount)).toLocaleString()} to go
                   </span>
                 </div>
+
+                <Button
+                  onClick={() => {
+                    setSelectedGoal(goal);
+                    setContributeOpen(true);
+                  }}
+                  className="w-full mt-3 bg-primary hover:bg-primary/90"
+                  size="sm"
+                >
+                  Add Money
+                </Button>
               </Card>
             );
           })}
         </div>
+
+        {/* Contribute Dialog */}
+        <Dialog open={contributeOpen} onOpenChange={setContributeOpen}>
+          <DialogContent className="bg-card border-border">
+            <DialogHeader>
+              <DialogTitle>
+                Add Money to {selectedGoal?.name} {selectedGoal?.emoji}
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleContribute} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="contribute-amount">Amount (₹)</Label>
+                <Input
+                  id="contribute-amount"
+                  type="number"
+                  value={contributeAmount}
+                  onChange={(e) => setContributeAmount(e.target.value)}
+                  placeholder="1000"
+                  required
+                  min="0.01"
+                  step="0.01"
+                  className="bg-background/50"
+                />
+              </div>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>Current: ₹{Number(selectedGoal?.current_amount || 0).toLocaleString()}</p>
+                <p>Target: ₹{Number(selectedGoal?.target_amount || 0).toLocaleString()}</p>
+              </div>
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-primary to-secondary"
+              >
+                {loading ? "Adding..." : "Add Contribution"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* Add Goal CTA */}
         {goals.length === 0 && (
