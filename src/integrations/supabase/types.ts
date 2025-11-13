@@ -14,13 +14,130 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string | null
+          description: string | null
+          expense_date: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string | null
+          description?: string | null
+          expense_date?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          expense_date?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          completed_lessons: Json | null
+          created_at: string | null
+          email: string
+          full_name: string | null
+          id: string
+          last_lesson_date: string | null
+          phone: string | null
+          streak_count: number | null
+          total_points: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          completed_lessons?: Json | null
+          created_at?: string | null
+          email: string
+          full_name?: string | null
+          id: string
+          last_lesson_date?: string | null
+          phone?: string | null
+          streak_count?: number | null
+          total_points?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          completed_lessons?: Json | null
+          created_at?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          last_lesson_date?: string | null
+          phone?: string | null
+          streak_count?: number | null
+          total_points?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      savings_goals: {
+        Row: {
+          created_at: string | null
+          current_amount: number | null
+          emoji: string | null
+          id: string
+          name: string
+          target_amount: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          current_amount?: number | null
+          emoji?: string | null
+          id?: string
+          name: string
+          target_amount: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          current_amount?: number | null
+          emoji?: string | null
+          id?: string
+          name?: string
+          target_amount?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "savings_goals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_lesson_streak: { Args: { user_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
