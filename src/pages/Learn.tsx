@@ -5,7 +5,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import BottomNav from "@/components/BottomNav";
-import { BookOpen, Award, Flame, Play, CheckCircle2, ArrowLeft } from "lucide-react";
+import { BookOpen, Award, Flame, Play, CheckCircle2, ArrowLeft, GraduationCap } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -230,6 +231,7 @@ const Learn = () => {
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [isPracticeMode, setIsPracticeMode] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -281,18 +283,20 @@ const Learn = () => {
   };
 
   const handleStartQuiz = (topic: typeof topics[0]) => {
-    // Check if already completed today
-    const today = new Date().toISOString().split('T')[0];
-    const completedLessons = profile?.completed_lessons || [];
-    const completedToday = completedLessons.some((l: any) => l.id === topic.id && l.date === today);
-    
-    if (completedToday && profile?.last_lesson_date === today) {
-      toast({
-        title: "Already Completed Today!",
-        description: "You've already completed this lesson today. Come back tomorrow to maintain your streak! 🔥",
-        variant: "destructive",
-      });
-      return;
+    // Check if already completed today (skip in practice mode)
+    if (!isPracticeMode) {
+      const today = new Date().toISOString().split('T')[0];
+      const completedLessons = profile?.completed_lessons || [];
+      const completedToday = completedLessons.some((l: any) => l.id === topic.id && l.date === today);
+      
+      if (completedToday && profile?.last_lesson_date === today) {
+        toast({
+          title: "Already Completed Today!",
+          description: "You've already completed this lesson today. Come back tomorrow to maintain your streak! 🔥\n\nTip: Enable Practice Mode to retake quizzes without affecting your progress.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     
     setSelectedTopic(topic);
@@ -327,42 +331,52 @@ const Learn = () => {
       const score = (correctCount / questions.length) * 100;
       const pointsEarned = selectedTopic ? Math.round((score / 100) * selectedTopic.points) : 0;
 
-      // Update user profile with points and streak
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && profile && selectedTopic) {
-        // Check if already completed today
-        const today = new Date().toISOString().split('T')[0];
-        const alreadyCompletedToday = profile.last_lesson_date === today;
-        
-        // Update streak using database function
-        if (!alreadyCompletedToday) {
-          await (supabase as any).rpc('update_lesson_streak', { user_id: user.id });
+      // Only update database if not in practice mode
+      if (!isPracticeMode) {
+        // Update user profile with points and streak
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && profile && selectedTopic) {
+          // Check if already completed today
+          const today = new Date().toISOString().split('T')[0];
+          const alreadyCompletedToday = profile.last_lesson_date === today;
+          
+          // Update streak using database function
+          if (!alreadyCompletedToday) {
+            await (supabase as any).rpc('update_lesson_streak', { user_id: user.id });
+          }
+
+          // Track completed lesson
+          const completedLessons = profile.completed_lessons || [];
+          const lessonRecord = { id: selectedTopic.id, date: today, score: Math.round(score) };
+          const updatedLessons = [...completedLessons.filter((l: any) => l.id !== selectedTopic.id || l.date !== today), lessonRecord];
+
+          // Update points
+          await (supabase as any)
+            .from("profiles")
+            .update({
+              total_points: (profile.total_points || 0) + pointsEarned,
+              completed_lessons: updatedLessons,
+            })
+            .eq("id", user.id);
+          
+          await loadProfile();
         }
-
-        // Track completed lesson
-        const completedLessons = profile.completed_lessons || [];
-        const lessonRecord = { id: selectedTopic.id, date: today, score: Math.round(score) };
-        const updatedLessons = [...completedLessons.filter((l: any) => l.id !== selectedTopic.id || l.date !== today), lessonRecord];
-
-        // Update points
-        await (supabase as any)
-          .from("profiles")
-          .update({
-            total_points: (profile.total_points || 0) + pointsEarned,
-            completed_lessons: updatedLessons,
-          })
-          .eq("id", user.id);
-        
-        await loadProfile();
       }
 
       setShowResults(true);
       
-      const streakMessage = profile?.streak_count > 1 ? ` 🔥 ${profile.streak_count} day streak!` : "";
-      toast({
-        title: "🎉 Quiz Completed!",
-        description: `You earned ${pointsEarned} points! Score: ${Math.round(score)}%${streakMessage}`,
-      });
+      if (isPracticeMode) {
+        toast({
+          title: "🎓 Practice Complete!",
+          description: `Score: ${Math.round(score)}% - Great job practicing! No points or streaks affected.`,
+        });
+      } else {
+        const streakMessage = profile?.streak_count > 1 ? ` 🔥 ${profile.streak_count} day streak!` : "";
+        toast({
+          title: "🎉 Quiz Completed!",
+          description: `You earned ${pointsEarned} points! Score: ${Math.round(score)}%${streakMessage}`,
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -612,6 +626,23 @@ const Learn = () => {
           </Card>
         </div>
 
+        {/* Practice Mode Toggle */}
+        <Card className="p-4 bg-gradient-to-br from-accent/5 to-accent/10 border-accent/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <GraduationCap className="w-5 h-5 text-accent-foreground" />
+              <div>
+                <p className="font-medium text-sm">Practice Mode</p>
+                <p className="text-xs text-muted-foreground">Retake quizzes without affecting progress</p>
+              </div>
+            </div>
+            <Switch
+              checked={isPracticeMode}
+              onCheckedChange={setIsPracticeMode}
+            />
+          </div>
+        </Card>
+
         {/* Topics */}
         <div className="space-y-3">
           <h3 className="font-semibold">Learning Path</h3>
@@ -626,11 +657,11 @@ const Learn = () => {
               <Card
                 key={topic.id}
                 className={`p-5 bg-card/80 backdrop-blur-lg border-2 transition-all ${
-                  isCompleted 
+                  isCompleted && !isPracticeMode
                     ? 'border-success/50 bg-success/5' 
                     : 'border-border glow-card hover:scale-[1.02] hover:border-primary/50 cursor-pointer'
                 }`}
-                onClick={() => !isCompleted && handleStartQuiz(topic)}
+                onClick={() => handleStartQuiz(topic)}
               >
                 <div className="flex items-start gap-4">
                   <div className="text-4xl">{topic.emoji}</div>
@@ -667,13 +698,13 @@ const Learn = () => {
                 </div>
                 <Button 
                   className={`w-full mt-4 h-11 ${
-                    isCompleted 
+                    isCompleted && !isPracticeMode
                       ? 'bg-success/20 text-success hover:bg-success/30' 
                       : 'bg-gradient-to-r from-primary to-secondary hover:opacity-90'
                   }`}
-                  disabled={isCompleted}
+                  disabled={isCompleted && !isPracticeMode}
                 >
-                  {isCompleted ? (
+                  {isCompleted && !isPracticeMode ? (
                     <>
                       <CheckCircle2 className="w-4 h-4 mr-2" />
                       Done for today! Come back tomorrow
@@ -681,7 +712,7 @@ const Learn = () => {
                   ) : (
                     <>
                       <Play className="w-4 h-4 mr-2" />
-                      Start Lesson
+                      {isPracticeMode && isCompleted ? "Practice Again" : "Start Lesson"}
                     </>
                   )}
                 </Button>
