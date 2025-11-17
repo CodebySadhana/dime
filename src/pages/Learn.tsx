@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import BottomNav from "@/components/BottomNav";
-import { BookOpen, Award, Flame, Play, CheckCircle2, ArrowLeft, GraduationCap } from "lucide-react";
+import { BookOpen, Award, Flame, Play, CheckCircle2, ArrowLeft, GraduationCap, Clock, TrendingUp, Sparkles, Target } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 const topics = [
   {
